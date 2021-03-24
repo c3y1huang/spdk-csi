@@ -45,6 +45,56 @@ spec:
         - name: dshm
           mountPath: /dev/shm
           # readOnly: true
+      - name: spdkcsi-registrar
+        securityContext:
+          privileged: true
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.0.1
+        imagePullPolicy: "IfNotPresent"
+        args:
+        - "--v=5"
+        - "--csi-address=unix:///csi/csi.sock"
+        - "--kubelet-registration-path=/var/lib/kubelet/plugins/csi.spdk.io/csi.sock"
+        volumeMounts:
+        - name: node-socket-dir
+          mountPath: /csi
+        - name: node-registration-dir
+          mountPath: /registration
+      - name: spdkcsi-node
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+          allowPrivilegeEscalation: true
+        image: c3y1huang/research:1-spdkcsi
+        imagePullPolicy: "IfNotPresent"
+        args:
+        - "--v=5"
+        - "--endpoint=unix:///csi/csi.sock"
+        - "--nodeid=$(NODE_ID)"
+        - "--node"
+        env:
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c",
+                        "/usr/sbin/iscsid || echo failed to start iscsid"]
+        volumeMounts:
+        - name: node-socket-dir
+          mountPath: /csi
+        - name: node-plugin-dir
+          mountPath: /var/lib/kubelet/plugins
+          mountPropagation: "Bidirectional"
+        - name: node-pod-dir
+          mountPath: /var/lib/kubelet/pods
+          mountPropagation: "Bidirectional"
+        - name: node-host-dev
+          mountPath: /dev
+        - name: node-host-sys
+          mountPath: /sys
       - name: spdkcsi-provisioner
         image: k8s.gcr.io/sig-storage/csi-provisioner:v2.0.2
         imagePullPolicy: "IfNotPresent"
@@ -106,3 +156,25 @@ spec:
         emptyDir:
           medium: Memory
           sizeLimit: "2Gi"
+      - name: node-socket-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins/csi.spdk.io
+          type: DirectoryOrCreate
+      - name: node-registration-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry/
+          type: Directory
+      - name: node-plugin-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins
+          type: Directory
+      - name: node-pod-dir
+        hostPath:
+          path: /var/lib/kubelet/pods
+          type: Directory
+      - name: node-host-dev
+        hostPath:
+          path: /dev
+      - name: node-host-sys
+        hostPath:
+          path: /sys
