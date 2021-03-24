@@ -17,6 +17,34 @@ spec:
       serviceAccount: spdkcsi-controller-sa
       hostNetwork: true
       containers:
+      - name: spdk-host
+        image: c3y1huang/research:1-spdk
+        env:
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        command: [ "bash", "-c", "/root/spdk/app/spdk_tgt/spdk_tgt & echo wait 5s... && sleep 5s && /root/spdk/scripts/rpc.py bdev_malloc_create -b Malloc0 1024 4096 && /root/spdk/scripts/rpc.py bdev_lvol_create_lvstore Malloc0 lvs0 && /root/spdk/scripts/rpc_http_proxy.py 127.0.0.1 9009 spdkcsiuser spdkcsipass" ]
+        # command: [ "sleep", "infinity" ]
+        ports:
+        - containerPort: 9009
+          name: http
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            hugepages-2Mi: 2Gi
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        volumeMounts:
+        - name: hugepage
+          mountPath: /dev/hugepages
+          readOnly: false
+        - name: dshm
+          mountPath: /dev/shm
+          # readOnly: true
       - name: spdkcsi-provisioner
         image: k8s.gcr.io/sig-storage/csi-provisioner:v2.0.2
         imagePullPolicy: "IfNotPresent"
@@ -40,7 +68,7 @@ spec:
         - name: socket-dir
           mountPath: /csi
       - name: spdkcsi-controller
-        image: spdkcsi/spdkcsi:canary
+        image: c3y1huang/research:1-spdkcsi
         imagePullPolicy: "IfNotPresent"
         args:
         - "--v=5"
@@ -71,3 +99,10 @@ spec:
       - name: spdkcsi-secret
         secret:
           secretName: spdkcsi-secret
+      - name: hugepage
+        emptyDir:
+          medium: HugePages
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: "2Gi"

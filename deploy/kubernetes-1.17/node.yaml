@@ -35,7 +35,7 @@ spec:
           capabilities:
             add: ["SYS_ADMIN"]
           allowPrivilegeEscalation: true
-        image: spdkcsi/spdkcsi:canary
+        image: c3y1huang/research:1-spdkcsi
         imagePullPolicy: "IfNotPresent"
         args:
         - "--v=5"
