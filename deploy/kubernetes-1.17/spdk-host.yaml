@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spdk-host
+  # namespace: kube-system
+  labels:
+    k8s-app: spdk-host
+spec:
+  selector:
+    matchLabels:
+      name: spdk-host
+  template:
+    metadata:
+      labels:
+        name: spdk-host
+    spec:
+      hostNetwork: true
+      tolerations:
+      # this toleration is to have the daemonset runnable on master nodes
+      # remove it if your masters can't run pods
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: spdk
+        image: c3y1huang/research:1-spdk
+        env:
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        command: [ "bash", "-c", "/root/spdk/app/spdk_tgt/spdk_tgt & echo wait 5s... && sleep 5s && /root/spdk/scripts/rpc.py bdev_malloc_create -b Malloc0 1024 4096 && /root/spdk/scripts/rpc.py bdev_lvol_create_lvstore Malloc0 lvs0 && /root/spdk/scripts/rpc_http_proxy.py 127.0.0.1 9009 spdkcsiuser spdkcsipass" ]
+        # command: [ "bash", "-c", "yum install bind-utils net-tools -y && sleep infinity" ]
+        ports:
+        - containerPort: 9009
+          name: http
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            hugepages-2Mi: 2Gi
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        volumeMounts:
+        - name: hugepage
+          mountPath: /dev/hugepages
+          readOnly: false
+        - name: dshm
+          mountPath: /dev/shm
+          # readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: hugepage
+        emptyDir:
+          medium: HugePages
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: "2Gi"
